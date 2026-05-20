@@ -294,6 +294,181 @@ Auth: service account with read-only access to the spreadsheet (env var: `GOOGLE
 
 ---
 
+## Database schema
+
+### Purpose
+
+The database is the single source of truth for this page. Initially it is populated by a sync from the Google Sheets "Now" tab (see column mapping above). Over time, the goal is for the UI itself to become the write surface — team members update features directly in the app, the spreadsheet becomes optional.
+
+The schema is also designed for **MCP queryability**: any BU member should be able to ask an AI assistant "what are we building for DAW SE and why?" and get a precise answer drawn from these tables.
+
+Recommended database: **Supabase** (Postgres). Row-level security can be added later when auth is wired up.
+
+---
+
+### Tables
+
+#### `products`
+
+```sql
+create table products (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null unique,   -- "ACRM", "Tivian", "DAW"
+  created_at  timestamptz default now()
+);
+```
+
+#### `features`
+
+```sql
+create table features (
+  id                      uuid primary key default gen_random_uuid(),
+  product_id              uuid not null references products(id) on delete cascade,
+  feature_name            text not null,
+  one_line_summary        text,
+  status                  text not null check (status in (
+                            'In Progress', 'Not Started', 'Completed', 'Planning Done', 'Partial'
+                          )),
+  type                    text not null check (type in ('Commitment', 'Stretch Goal')),
+  ownership               text,
+  strategy_doc_url        text,        -- links to strategy doc (what/why/rollout)
+  specs_url               text,
+  latest_update           text,
+  marketing_materials_url text,
+  sheets_row_id           text,        -- reference back to the spreadsheet row; used during sync to upsert cleanly
+  created_at              timestamptz default now(),
+  updated_at              timestamptz default now()
+);
+```
+
+#### `customers`
+
+Seeded from the team OS / Notion. This is the canonical customer list — the same records that back the customer-view app and the ACRM.
+
+```sql
+create table customers (
+  id           uuid primary key default gen_random_uuid(),
+  name         text not null unique,
+  arr          numeric not null default 0,   -- pulled from Notion; kept in sync via the same Notion → DB pipeline
+  notion_slug  text,                          -- e.g. "scope", "daw-se" — used to link to customer-view
+  created_at   timestamptz default now(),
+  updated_at   timestamptz default now()
+);
+```
+
+#### `feature_customers` (join table)
+
+Which customers requested which feature. The ARR shown on the page is the sum of `customers.arr` for all rows joining to a given feature — it is never stored on the feature itself.
+
+```sql
+create table feature_customers (
+  feature_id   uuid not null references features(id) on delete cascade,
+  customer_id  uuid not null references customers(id) on delete cascade,
+  primary key (feature_id, customer_id)
+);
+```
+
+---
+
+### Entity relationship
+
+```
+products
+  └─< features           (one product has many features)
+        └─< feature_customers >─ customers
+                                  (many-to-many: features ↔ customers)
+```
+
+---
+
+### Key queries
+
+These are the queries the MCP server and the UI both rely on.
+
+**All features for a product:**
+```sql
+select f.*, p.name as product_name
+from features f
+join products p on p.id = f.product_id
+where p.name = 'ACRM'
+order by f.updated_at desc;
+```
+
+**Which customers requested a feature + total ARR:**
+```sql
+select c.name, c.arr, c.notion_slug
+from feature_customers fc
+join customers c on c.id = fc.customer_id
+where fc.feature_id = $1;
+
+-- Total ARR for the feature:
+select sum(c.arr)
+from feature_customers fc
+join customers c on c.id = fc.customer_id
+where fc.feature_id = $1;
+```
+
+**What are we building for a given customer?**
+```sql
+select f.feature_name, f.one_line_summary, f.status, f.strategy_doc_url, p.name as product
+from feature_customers fc
+join features f on f.id = fc.feature_id
+join products p on p.id = f.product_id
+join customers c on c.id = fc.customer_id
+where c.name ilike '%DAW SE%'
+order by p.name, f.status;
+```
+
+**Everything in progress across all products:**
+```sql
+select p.name as product, f.feature_name, f.one_line_summary, f.strategy_doc_url
+from features f
+join products p on p.id = f.product_id
+where f.status = 'In Progress'
+order by p.name;
+```
+
+---
+
+### Sync flow (Google Sheets → DB)
+
+Run on a schedule (e.g., nightly cron or on-demand via the UI):
+
+1. Fetch `Now!A:L` from Google Sheets
+2. For each row: upsert into `products` (by name), upsert into `features` (by `sheets_row_id`)
+3. Parse col F (customer names, comma-separated) → look up each name in `customers` → insert into `feature_customers`
+4. Customer ARR comes from the `customers` table (Notion-sourced), not from the sheet
+
+```ts
+// lib/sync/sheets-to-db.ts
+export async function syncFromSheets() {
+  const rows = await fetchSheetRows("Now!A:L");
+  for (const row of rows) {
+    const product = await upsertProduct(row.productName);
+    const feature = await upsertFeature(product.id, row);
+    const names = row.requestingCustomers.split(",").map((s) => s.trim());
+    await syncFeatureCustomers(feature.id, names);
+  }
+}
+```
+
+---
+
+### MCP tools (v2)
+
+Once the DB is live, expose these as MCP tools so any AI assistant in the BU can query product work:
+
+| Tool | Description |
+|---|---|
+| `get_features_in_development` | Returns all features grouped by product, with status, ARR, and strategy doc URL |
+| `get_features_for_customer(name)` | Returns every feature a given customer has requested, across all products |
+| `get_feature_details(feature_name)` | Returns full detail: summary, status, requesting customers, ARR, strategy doc, latest update |
+| `get_products` | Returns the list of products and their feature counts |
+
+These tools answer the core BU question directly: **"What are we building for [customer] and why?"**
+
+---
+
 ## What is NOT built in v1
 
 - Authentication / access control
