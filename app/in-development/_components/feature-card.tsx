@@ -28,6 +28,7 @@ const CHIP_LIMIT = 3;
 export function FeatureCard({ feature, onClick }: Props) {
   const visibleCustomers = feature.requestingCustomers.slice(0, CHIP_LIMIT);
   const overflowCount = feature.requestingCustomers.length - CHIP_LIMIT;
+  const featureArr = feature.requestingCustomers.reduce((sum, c) => sum + c.arr, 0);
 
   return (
     <button
@@ -56,7 +57,7 @@ export function FeatureCard({ feature, onClick }: Props) {
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <span className="text-[12px] font-medium tabular-nums text-neutral-500 dark:text-neutral-400">
-            {formatARRCompact(feature.arr)}
+            {formatARRCompact(featureArr)}
           </span>
           {/* Contextual chevron — enters on hover */}
           <ChevronRight

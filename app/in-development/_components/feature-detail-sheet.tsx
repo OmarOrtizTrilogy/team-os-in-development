@@ -59,7 +59,7 @@ export function FeatureDetailSheet({ feature, open, onOpenChange }: Props) {
                   ARR from requesting customers
                 </p>
                 <p className="text-[28px] font-medium tabular-nums text-neutral-900 dark:text-neutral-100">
-                  {formatARR(feature.arr)}
+                  {formatARR(feature.requestingCustomers.reduce((sum, c) => sum + c.arr, 0))}
                 </p>
               </div>
 
@@ -88,9 +88,6 @@ export function FeatureDetailSheet({ feature, open, onOpenChange }: Props) {
                     </span>
                   ))}
                 </div>
-                <p className="mt-2 text-[11px] text-neutral-400 dark:text-neutral-500">
-                  Notion customer linking available in v2
-                </p>
               </div>
 
               {/* Latest update */}
@@ -106,17 +103,31 @@ export function FeatureDetailSheet({ feature, open, onOpenChange }: Props) {
               )}
 
               {/* External links */}
-              {(feature.specsUrl || feature.marketingMaterialsUrl) && (
+              {(feature.strategyDocUrl || feature.specsUrl || feature.marketingMaterialsUrl) && (
                 <div className="space-y-2">
+                  {feature.strategyDocUrl && (
+                    <div>
+                      <a
+                        href={feature.strategyDocUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-[13px] text-[#0C447C] dark:text-[#90C4F5] hover:underline"
+                      >
+                        View strategy doc <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                      </a>
+                    </div>
+                  )}
                   {feature.specsUrl && (
-                    <a
-                      href={feature.specsUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-[13px] text-[#0C447C] dark:text-[#90C4F5] hover:underline"
-                    >
-                      View spec <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                    </a>
+                    <div>
+                      <a
+                        href={feature.specsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-[13px] text-[#0C447C] dark:text-[#90C4F5] hover:underline"
+                      >
+                        View spec <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                      </a>
+                    </div>
                   )}
                   {feature.marketingMaterialsUrl && (
                     <div>

@@ -9,6 +9,7 @@ export type FeatureType = "Commitment" | "Stretch Goal";
 
 export interface RequestingCustomer {
   name: string;
+  arr: number;
   notionSlug?: string;
 }
 
@@ -19,8 +20,8 @@ export interface Feature {
   status: FeatureStatus;
   type: FeatureType;
   ownership: string;
-  arr: number;
   requestingCustomers: RequestingCustomer[];
+  strategyDocUrl?: string;
   specsUrl?: string;
   latestUpdate?: string;
   marketingMaterialsUrl?: string;

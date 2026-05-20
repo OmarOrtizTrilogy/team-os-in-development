@@ -9,10 +9,19 @@ interface Props {
 
 export function PageHeader({ data }: Props) {
   const totalFeatures = data.products.reduce((sum, p) => sum + p.features.length, 0);
-  const totalARR = data.products.reduce(
-    (sum, p) => sum + p.features.reduce((s, f) => s + f.arr, 0),
-    0
-  );
+
+  // Deduplicate customers by name — each customer's ARR counted once regardless of how many features they appear in
+  const customerARRMap = new Map<string, number>();
+  for (const product of data.products) {
+    for (const feature of product.features) {
+      for (const customer of feature.requestingCustomers) {
+        if (!customerARRMap.has(customer.name)) {
+          customerARRMap.set(customer.name, customer.arr);
+        }
+      }
+    }
+  }
+  const totalARR = Array.from(customerARRMap.values()).reduce((sum, arr) => sum + arr, 0);
 
   return (
     <div className="mb-8">
