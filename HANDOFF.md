@@ -76,8 +76,8 @@ InDevelopmentView
   │       ├── status: FeatureStatus
   │       ├── type: FeatureType
   │       ├── ownership: string
-  │       ├── arr: number
-  │       ├── requestingCustomers: RequestingCustomer[]
+  │       ├── requestingCustomers: RequestingCustomer[]   // ARR is summed from these
+  │       ├── strategyDocUrl?: string
   │       ├── specsUrl?: string
   │       ├── latestUpdate?: string
   │       └── marketingMaterialsUrl?: string
@@ -90,7 +90,9 @@ Key types:
 |---|---|
 | `FeatureStatus` | `"In Progress"` · `"Not Started"` · `"Completed"` · `"Planning Done"` · `"Partial"` |
 | `FeatureType` | `"Commitment"` · `"Stretch Goal"` |
-| `RequestingCustomer` | `{ name: string; notionSlug?: string }` — `notionSlug` reserved for v2 |
+| `RequestingCustomer` | `{ name: string; arr: number; notionSlug?: string }` — ARR pulled from team OS / Notion |
+
+**Feature ARR is not stored directly.** It is always computed as `requestingCustomers.reduce((sum, c) => sum + c.arr, 0)`. The page header total deduplicates customers across features so each account's ARR is counted once.
 
 ### Mock data — `lib/mock-data/in-development.ts`
 
@@ -116,13 +118,9 @@ Title, subtitle, and summary stats row: product count · feature count · total 
 
 ### `FilterBar`
 
-**Props:** `{ products, selectedProduct, onProductChange, statusFilter, onStatusFilterChange }`
+**Props:** `{ products, selectedProduct, onProductChange }`
 
-Two controls in a row:
-- **Product pills** (left): "All" + one pill per product. Active pill is filled. `active:scale-[0.96]` press animation.
-- **Active / All toggle** (right): segmented control. "Active" shows `In Progress + Planning Done + Partial` only. "All" shows everything.
-
-Filter state lives in `page.tsx` and is passed down.
+Product pills: "All" + one pill per product. Active pill is filled (`bg-neutral-900`). `active:scale-[0.96]` press animation. Filter state lives in `page.tsx` and is passed down.
 
 ### `ProductSection`
 
@@ -154,12 +152,13 @@ The main interaction unit. A `<button>` element with:
 Radix `Dialog` rendered as a right-side sheet (`max-w-md`). Content:
 1. Feature name (SheetTitle)
 2. Status badge + Type badge
-3. ARR — large, tabular-nums (`text-[28px]`)
+3. ARR — computed from requesting customers, large tabular-nums (`text-[28px]`)
 4. Ownership
-5. Requesting customers — full list as rounded-full chips; note about Notion linking in v2
+5. Requesting customers — full list as rounded-full chips
 6. Latest update — paragraph text
-7. Spec link → external (only when `specsUrl` set)
-8. Marketing materials → external (only when `marketingMaterialsUrl` set)
+7. Strategy doc link → external (only when `strategyDocUrl` set)
+8. Spec link → external (only when `specsUrl` set)
+9. Marketing materials → external (only when `marketingMaterialsUrl` set)
 
 The `feature` prop is nullable — sheet renders nothing when closed (avoids flash of stale content).
 
@@ -278,8 +277,8 @@ Auth: service account with read-only access to the spreadsheet (env var: `GOOGLE
 | C | `feature.type` | `"Commitment"` or `"Stretch Goal"` |
 | D | `feature.ownership` | Team or project lead |
 | E | `feature.oneLineSummary` | — |
-| F | `feature.requestingCustomers` | Comma-separated names → split to `RequestingCustomer[]` |
-| G | `feature.arr` | Parse numeric from string (remove `$`, commas) |
+| F | `feature.requestingCustomers[].name` | Comma-separated names → split, then look up each in Notion customer DB to get `arr` |
+| G | `feature.requestingCustomers[].arr` | Join Sheet col G amount ÷ customer count, or look up per-customer ARR from Notion |
 | H | `feature.specsUrl` | Link to spec doc |
 | I | `feature.latestUpdate` | Free text |
 | J | `feature.marketingMaterialsUrl` | Link |
